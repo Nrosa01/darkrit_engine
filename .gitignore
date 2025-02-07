@@ -1,0 +1,6 @@
+assets/*
+.timetracker
+cam_demo.lua
+conf.lua
+loading_demo.lua
+main.lua
