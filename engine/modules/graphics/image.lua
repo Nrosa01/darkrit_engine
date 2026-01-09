@@ -1,4 +1,5 @@
 local module = (...):match('(.-)[^%.]+$')
+local SpriteSheet = require(module .. 'spritesheet')
 
 ---@diagnostic disable-next-line
 local ru = Darkrit._internal.require_utils
@@ -6,37 +7,26 @@ local ru = Darkrit._internal.require_utils
 ---@module "peachy"
 local peachy = ru.require_third_party("josh-perry.peachy")
 
----@alias AnimatedSprite Dakrit.Graphics.AnimatedSprite
+---@alias AnimatedSprite Darkrit.Graphics.AnimatedSprite
 
 ---@class Darkrit.ImageAsset
 ---@field image love.Image
----@field peachy_instance Dakrit.Graphics.AnimatedSprite
-local Image = {}
-Image.__index = Image
+local ImageAssetCreator = {}
+ImageAssetCreator.__index = ImageAssetCreator
 
 --- Creates a new Image
 --- @param path string
---- @return Darkrit.ImageAsset
-function Image.new(path)
+--- @return Darkrit.Graphics.AnimatedSprite | Darkrit.Graphics.SpriteSheet
+function ImageAssetCreator.new(path)
     local image = love.graphics.newImage(path)
     local json_path = path:gsub('%.png$', '.json')
-    local instance = {
-        image = image,
-        peachy_instance = peachy.new(json_path, image)
-    }
-    setmetatable(instance, Image)
-    return instance
-end
+    local json = Darkrit.utils.json.decode(love.filesystem.read(json_path))
 
---- Creates a new animation instance
---- @param starting_tag string?
---- @return AnimatedSprite
-function Image:new_animation_instance(starting_tag)
-    local instance = self.peachy_instance:clone()
-    if starting_tag then
-        instance:setTag(starting_tag)
+    if json.meta and json.meta.app == "Darkrit" then
+        return SpriteSheet.new(image, json)
+    else
+        return peachy.new(json, image)
     end
-    return instance
 end
 
-return Image
+return ImageAssetCreator

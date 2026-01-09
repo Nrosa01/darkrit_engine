@@ -15,25 +15,42 @@ local Graphics =
 }
 
 ---@private
-function  Graphics:_init()
+function Graphics:_init()
     love.window.setVSync(Darkrit.config.graphics.vsync)
 
-    love.window.updateMode(love.graphics.getWidth(), love.graphics.getHeight(), {
-        resizable  = true,
-        fullscreen = Darkrit.config.graphics.fullscreen,
-        vsync      = Darkrit.config.graphics.vsync ~= 0,
-        fullscreentype = Darkrit.config.graphics.fullscreen_type or 'desktop'
+    local window_width = Darkrit.config.graphics.resolution.window_width or love.graphics.getWidth()
+    local window_height = Darkrit.config.graphics.resolution.window_height or love.graphics.getHeight()
+    local fullscreen = Darkrit.config.graphics.fullscreen or false
+    local fullscren_type = Darkrit.config.graphics.fullscreen_type or 'desktop'
+    local is_borderless = Darkrit.config.graphics.fullscreen_type == "borderless"
+    ---@cast fullscren_type love.FullscreenType
+
+    if Darkrit.config.graphics.fullscreen_type == "borderless" then
+        -- Set windows to maximum width and height
+        if fullscreen then
+            window_width, window_height = love.window.getDesktopDimensions()
+            love.window.setPosition(0, 0)
+        end
+    end
+
+    love.window.updateMode(window_width, window_height, {
+        resizable      = Darkrit.config.graphics.resizable or false,
+        fullscreen     = not is_borderless and fullscreen,
+        vsync          = Darkrit.config.graphics.vsync ~= 0,
+        fullscreentype = not is_borderless and fullscren_type or "desktop",
     })
+
 
     love.graphics.setDefaultFilter(Darkrit.config.graphics.filter_mode, Darkrit.config.graphics.filter_mode)
 
-    self.camera = camera.new(Darkrit.config.graphics.resolution.game_width, Darkrit.config.graphics.resolution.game_height, 
-    Darkrit.config.graphics.resolution.scale_mode, 0, 0, 300, 0, 1, 
-    Darkrit.config.graphics.adjust_to_game_resolution)
+    self.camera = camera.new(Darkrit.config.graphics.resolution.game_width,
+        Darkrit.config.graphics.resolution.game_height,
+        Darkrit.config.graphics.resolution.scale_mode, 0, 0, 300, 0, 1,
+        Darkrit.config.graphics.adjust_to_game_resolution)
 end
 
 function Graphics:get_game_resolution()
-    return self.camera:get_raw_resolution()
+    return self.camera:get_raw_game_resolution()
 end
 
 function Graphics:get_game_width()
@@ -46,6 +63,14 @@ end
 
 function Graphics:get_windows_width()
     return love.graphics.getWidth()
+end
+
+function Graphics:get_windows_dimensions()
+    return love.graphics.getDimensions()
+end
+
+function Graphics:get_screen_dimensions()
+    return love.window.getDesktopDimensions()
 end
 
 function Graphics:get_windows_height()

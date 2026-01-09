@@ -1,0 +1,37 @@
+{
+    "meta": {
+      "app": "Darkrit",
+      "slice_type": "grid",
+      "cell_size": 16,
+      "default_pivot": {
+        "x": 0.5,
+        "y": 1
+      }
+    },
+    "sprites": [
+      { "sprite": 0, "name": "rock1", "pivot": { "x": 0.5, "y": 0} },
+      { "sprite": 1, "name": "rock2" },
+      { "sprite": 2, "name": "rock3" },
+      { "sprite": 3, "name": "rock4" },
+      { "sprite": 4, "name": "dirt1" },
+      { "sprite": 5, "name": "dirt2" },
+      { "sprite": 6, "name": "dirt3" },
+      { "sprite": 7, "name": "dirt4" },
+      { "sprite": 8, "name": "water1" },
+      { "sprite": 9, "name": "water2" },
+      { "sprite": 10, "name": "water3" },
+      { "sprite": 11, "name": "water4" },
+      { "sprite": 12, "name": "water5" },
+      { "sprite": 13, "name": "grass1" },
+      { "sprite": 14, "name": "grass2" },
+      { "sprite": 15, "name": "grass3" },
+      { "sprite": 16, "name": "grass4" }
+    ],
+    "groups": {
+      "rock": [1, 2, 3, 4],
+      "dirt": { "from": 5, "to": 8 },
+      "water": { "from": 9, "to": 12 },
+      "grass": { "from": 13, "to": 16 }
+    }
+  }
+  

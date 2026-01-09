@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Darkrit Sprite Sheet Schema",
+  "description": "Schema for Darkrit sprite sheet JSON files",
+  "type": "object",
+  "required": ["meta"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["slice_type", "cell_size"],
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Application identifier",
+          "default": "Darkrit"
+        },
+        "slice_type": {
+          "type": "string",
+          "enum": ["grid", "packed"],
+          "description": "How sprites are arranged in the image"
+        },
+        "cell_size": {
+          "type": "integer",
+          "description": "Size of each grid cell (for grid slice_type)"
+        },
+        "default_pivot": {
+          "type": "object",
+          "description": "Default pivot point for all sprites",
+          "properties": {
+            "x": { "type": "number", "minimum": 0, "maximum": 1 },
+            "y": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      }
+    },
+    "sprites": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sprite"],
+        "properties": {
+          "sprite": {
+            "type": "integer",
+            "description": "0-based index of the sprite in the grid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Identifier for the sprite"
+          },
+          "pivot": {
+            "type": "object",
+            "description": "Individual pivot point override",
+            "properties": {
+              "x": { "type": "number", "minimum": 0, "maximum": 1 },
+              "y": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "groups": {
+      "type": "object",
+      "description": "Named groups of sprites",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Array of sprite indices"
+          },
+          {
+            "type": "object",
+            "required": ["from", "to"],
+            "properties": {
+              "from": { "type": "integer" },
+              "to": { "type": "integer" }
+            },
+            "description": "Range of sprite indices"
+          }
+        ]
+      }
+    }
+  }
+}

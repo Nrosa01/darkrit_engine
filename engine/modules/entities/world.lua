@@ -22,9 +22,12 @@
 
 require("table.clear")
 
----@diagnostic disable-next-line
+---@diagnostic disable:invisible
+
 local ru = Darkrit._internal.require_utils ---@module "require_utils"
 local Entity = ru.require_module('entities.entity') ---@module "entities.entity"
+local slick = ru.require_third_party('erinmaus.slick') ---@module "erinmaus.slick"
+local world_physics = ru.require_module('entities.world_physics') ---@module "entities.world_physics"
 local algorithm = Darkrit.algorithm ---@module "algorithm"
 local adaptive_sort = algorithm.adaptive_inplace_sort
 
@@ -71,6 +74,18 @@ end
 --- Entity System ---
 ---------------------
 
+---@class Darkrit.World.Hooks
+---@field before_update fun(dt: number)[] @Hooks to be called before update
+---@field after_update fun(dt: number)[] @Hooks to be called after update
+---@field before_draw fun()[] @Hooks to be called before draw
+---@field after_draw fun()[] @Hooks to be called after draw
+
+---@alias hook_type
+---| '"before_update"' # Hook to be called before update (but after flushing entities)
+---| '"after_update"' # Hook to be called after update and before physics update. Call be also considered a pre physics update
+---| '"before_draw"' # Hook to be called before drawing the world
+---| '"after_draw"' # Hook to be called after drawing the world
+
 --- @class Darkrit.World
 --- @field private _entities_to_add Darkrit.Entity[] @Entities to be added to the group
 --- @field private _updateable_component_to_add Darkrit.Entity.Component[] @Components to be added to the entities
@@ -83,8 +98,12 @@ end
 --- @field private _draw_component_deleted_this_frame boolean @Whether a component was deleted this frame
 --- @field private _updateable_component_deleted_this_frame boolean @Whether a component was deleted this frame
 --- @field private _render_frame number @Frame counter for sorting
---- @field physics_world love.World @The physics world
+--- @field physics_world_box2d love.World @The physics world
+--- @field physics_world_slick slick.world @The physics world
+--- @field physics_world love.World | slick.world @The physics world
 --- @field events table<string, fun(args: ...)[]> @Events to be broadcasted
+--- @field shared table<string, any> @Shared data between systems
+--- @field hooks Darkrit.World.Hooks @Hooks to be called before and after update and draw
 local World = {}
 World.__index = World
 
@@ -98,57 +117,71 @@ function World.new()
         _updateable_queue = {},
         _render_queue = {},
         events = {},
+        shared = {},
         _updateable_component_to_add = {},
         _draw_component_to_add = {},
         _entity_deleted_this_frame = false,
         _draw_component_deleted_this_frame = false,
         _updateable_component_deleted_this_frame = false,
         _render_frame = 0,
-        physics_world = love.physics.newWorld(0, 0, true),
+        physics_world = nil,
+        hooks = {
+            before_update = {},
+            after_update = {},
+            before_draw = {},
+            after_draw = {},
+        },
     }, World)
 
-    -- Set global collision callback for physics
-    local function beginContact(a, b, contact)
-        local entityA = a:getUserData() ---@type Darkrit.Entity
-        local entityB = b:getUserData() ---@type Darkrit.Entity
-        if entityA then
-            if a:isSensor() or b:isSensor() then
-                entityA:send_message("on_trigger_enter", entityB, contact)
-            else
-                entityA:send_message("on_collision_enter", entityB, contact)
-            end
-        end
-        if entityB then
-            if a:isSensor() or b:isSensor() then
-                entityB:send_message("on_trigger_exit", entityA, contact)
-            else
-                entityB:send_message("on_collision_exit", entityA, contact)
-            end
-        end
+    if love.physics then
+        instance.physics_world_box2d = love.physics.newWorld(0, 0, true)
+        instance.physics_world_box2d:setCallbacks(world_physics.begin_contact_box2d, world_physics.end_contact_box2d)
+        instance.physics_world = instance.physics_world_box2d
+        Darkrit.physics:add_box2d_world(instance.physics_world_box2d)
+    else
+        local w, h = Darkrit.graphics:get_game_resolution()
+        instance.physics_world_slick = slick.world.new(w, h)
+        instance.physics_world = instance.physics_world_slick
     end
-
-    local function endContact(a, b, contact)
-        local entityA = a:getUserData()
-        local entityB = b:getUserData()
-        if entityA then
-            if a:isSensor() or b:isSensor() then
-                entityA:send_message("on_trigger_exit", entityB, contact)
-            else
-                entityA:send_message("on_collision_exit", entityB, contact)
-            end
-        end
-        if entityB then
-            if a:isSensor() or b:isSensor() then
-                entityB:send_message("on_trigger_exit", entityA, contact)
-            else
-                entityB:send_message("on_collision_exit", entityA, contact)
-            end
-        end
-    end
-
-    instance.physics_world:setCallbacks(beginContact, endContact)
 
     return instance
+end
+
+--- This must be called when the world is no longer needed
+--- The world must not be used after this call
+function World:dispose()
+    if love.physics then
+        Darkrit.physics:remove_box2d_world(self.physics_world_box2d)
+        self.physics_world_box2d:destroy()
+    end
+
+    table.clear(self.entities)
+    table.clear(self._updateable_queue)
+    table.clear(self._render_queue)
+
+    self = nil
+end
+
+--- Registers a hook for the world.
+--- @param hook_name hook_type
+--- @param callback fun(...: any)
+function World:register_hook(hook_name, callback)
+    assert(self.hooks[hook_name], "Invalid hook name: " .. hook_name)
+    table.insert(self.hooks[hook_name], callback)
+end
+
+--- Deregisters a hook for the world. Be aware that if your hook is an anonymous function
+--- you won't be able to deregister it.
+---@param hook_name hook_type
+---@param callback fun(...: any)
+function World:deregister_hook(hook_name, callback)
+    local hooks = self.hooks[hook_name]
+    for i = 1, #hooks do
+        if hooks[i] == callback then
+            table.remove(hooks, i)
+            return
+        end
+    end
 end
 
 ---Allows to hook to world events from outside the world
@@ -383,6 +416,11 @@ function World:_remove_marked()
 end
 
 function World:update(dt)
+    -- Call before-update hooks
+    for _, hook in ipairs(self.hooks.before_update) do
+        hook(dt)
+    end
+
     self:_flush()
     self:_remove_marked()
 
@@ -390,14 +428,19 @@ function World:update(dt)
         self._updateable_queue[i]:update(dt)
     end
 
-    self.physics_world:update(dt)
-end
+    -- Call after-update hooks
+    for _, hook in ipairs(self.hooks.after_update) do
+        hook(dt)
+    end
 
-local function sort_to_num(a)
-    return a.sorting_layer.ordering * 1e10 + a.render_order * 1e5 + a.entity.position.y
+    world_physics.update(self.physics_world, dt)
 end
 
 function World:draw()
+    for _, hook in ipairs(self.hooks.before_draw) do
+        hook()
+    end
+
     --- Only sort every x frames to aliviate some CPU
     --- User shouldn't perceive the sort delay
     --- In the future I could sort dynamically depending on FPS
@@ -408,6 +451,14 @@ function World:draw()
 
     for i = 1, #self._render_queue do
         self._render_queue[i]:draw()
+    end
+
+    for _, hook in ipairs(self.hooks.after_draw) do
+        hook()
+    end
+
+    if Darkrit.config.physics.draw_physics then
+        world_physics.debug_draw_physics(self.physics_world)
     end
 
     self._render_frame = self._render_frame + 1
@@ -449,26 +500,6 @@ function World:remove_from_group(entity, group_name)
     local group = self._groups[group_name]
     assert(group, 'Group does not exist')
     group:remove(entity)
-end
-
---- Debug draws all physics bodies and their shapes.
-function World:debugDrawPhysics()
-    love.graphics.setColor(1, 0, 0, 1)
-    for _, body in ipairs(self.physics_world:getBodies()) do
-        for _, fixture in ipairs(body:getFixtures()) do
-            local shape = fixture:getShape()
-            local shapeType = shape:getType()
-            if shapeType == "circle" then
-                local x, y = body:getPosition()
-                local radius = shape:getRadius()
-                love.graphics.circle("line", x, y, radius)
-            elseif shapeType == "polygon" then
-                love.graphics.polygon("line", body:getWorldPoints(shape:getPoints()))
-            end
-            -- Extend for other shape types as needed.
-        end
-    end
-    love.graphics.setColor(1, 1, 1, 1)
 end
 
 return World

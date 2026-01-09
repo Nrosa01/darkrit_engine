@@ -24,14 +24,6 @@ local function load_script(path)
     return script
 end
 
---- Wait for a file to be created
---- @param path string
-local function wait_for_file(path)
-    while not love.filesystem.getInfo(path) do
-        love.timer.sleep(0.05)
-    end
-end
-
 local function load_aseprite(path)
     -- Search for aseprite.exe using `where` if Windows, or `which` if Unix
     local os = love.system.getOS()
@@ -61,10 +53,6 @@ local function load_aseprite(path)
     end
 
     local png_path = path:gsub('%.aseprite$', '.png')
-    local json_path = path:gsub('%.aseprite$', '.json')
-
-    wait_for_file(png_path)
-    wait_for_file(json_path)
 
     return load_image(png_path)
 end

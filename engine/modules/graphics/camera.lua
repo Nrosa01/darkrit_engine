@@ -140,8 +140,8 @@ function Camera.new(canvas_w, canvas_h, scale_mode, x, y, ortho_size, rotation, 
     rawCamera._user_canvas_w = canvas_w or love.graphics.getWidth()
     rawCamera._user_canvas_h = canvas_h or love.graphics.getHeight()
 
-    rawCamera._canvas_width = canvas_w
-    rawCamera._canvas_height = canvas_h
+    rawCamera._canvas_width = rawCamera._user_canvas_w
+    rawCamera._canvas_height = rawCamera._user_canvas_h
     rawCamera.scale_mode = scale_mode or Camera.SCALE_MODES.LETTERBOX
     rawCamera._internal_canvas = love.graphics.newCanvas(rawCamera._canvas_width, rawCamera._canvas_height)
     rawCamera._screen_scale = 1
@@ -151,7 +151,7 @@ function Camera.new(canvas_w, canvas_h, scale_mode, x, y, ortho_size, rotation, 
     -- Camera transform parameters.
     rawCamera.x = x or 0
     rawCamera.y = y or 0
-    rawCamera.ortho_size = ortho_size or (canvas_h / 2)
+    rawCamera.ortho_size = ortho_size or (rawCamera._user_canvas_h / 2)
     rawCamera.rotation = rotation or 0
     rawCamera.zoom = zoom or 1
    
@@ -180,11 +180,10 @@ function Camera.new(canvas_w, canvas_h, scale_mode, x, y, ortho_size, rotation, 
         end,
     })
 
-    -- Inicializamos la escala de pantalla usando el proxy (para acceder a los métodos de la clase)
     proxy:update_screen_scale(love.graphics.getWidth(), love.graphics.getHeight())
 
     if auto_adjust then
-        proxy:adjust_to_resolution(love.graphics.getWidth(), love.graphics.getHeight())
+        proxy:adjust_to_resolution()
     end
 
     proxy:_update_transform()
@@ -193,17 +192,18 @@ function Camera.new(canvas_w, canvas_h, scale_mode, x, y, ortho_size, rotation, 
 end
 
 --- Adjusts the ortho_size so that the view shows exactly the canvas resolution in world units.
---- In our case, for a canvas of 320×320 and zoom = 1, the camera should display 320 pixels (i.e. 320 world units) horizontally.
+--- Example: For a canvas of 320×320 and zoom = 1, the camera should display 320 pixels (i.e. 320 world units) horizontally.
 --- Since ortho_size represents half the visible height, we set it to (min(canvas_w, canvas_h) / (2 * zoom)).
----@param phys_w number Physical screen width (not used in this calculation but kept for consistency)
----@param phys_h number Physical screen height
-function Camera:adjust_to_resolution(phys_w, phys_h)
-    -- We want a 1:1 mapping between canvas pixels and world units.
+function Camera:adjust_to_resolution()
     local small_size = math.min(self._user_canvas_w, self._user_canvas_h)
     self.ortho_size = small_size / (2 * self.zoom)
 end
 
-function Camera:get_raw_resolution()
+--- Returns the raw game resolution (internal canvas size).
+--- This resolution can be different to the user-defined resolution if the scale mode is BOUNDLESS_ASPECT.
+---@return number
+---@return number
+function Camera:get_raw_game_resolution()
     return self._canvas_width, self._canvas_height
 end
 
@@ -267,7 +267,7 @@ function Camera:update_screen_scale(win_w, win_h)
 end
 
 --- Sets the camera scale mode and updates the screen scale.
----@param scale_mode Darkrit.Graphics.Camera.SCALE_MODES  One of Camera.SCALE_MODES
+---@param scale_mode Darkrit.Graphics.Camera.SCALE_MODES 
 function Camera:set_scale_mode(scale_mode)
     self.scale_mode = scale_mode or self.scale_mode
     self:update_screen_scale(love.graphics.getWidth(), love.graphics.getHeight())
@@ -292,7 +292,7 @@ function Camera:set_camera(x, y, ortho_size, rotation, zoom)
     self.ortho_size = ortho_size or self.ortho_size
     self.rotation = rotation or self.rotation
     self.zoom = zoom or self.zoom
-    self:apply_limits()
+    self:_apply_limits()
 end
 
 --- Sets camera limits using a polygon (an array of points {x, y}).
@@ -305,7 +305,8 @@ end
 --- Clamps the camera position within the limits, if any.
 -- When a polygon is set as limits, the camera view is clamped so that
 -- its view rectangle stays within the polygon.
-function Camera:apply_limits()
+---@private This should not be used outside the class
+function Camera:_apply_limits()
     if self._limits_polygon then
         local aspect = self._canvas_width / self._canvas_height
         local half_width = (self.ortho_size * aspect) / self.zoom
@@ -348,7 +349,9 @@ end
 
 --- Begins rendering to the internal canvas and applies the camera transformation.
 --- Call this instead of love.graphics.push().
-function Camera:push()
+function Camera:attach()
+    self:_apply_limits()
+
     -- I don't trust the user is calling love.resize, so I check the window size here xD
     local win_w, win_h = love.graphics.getWidth(), love.graphics.getHeight()
     if win_w ~= self._canvas_width or win_h ~= self._canvas_height then
@@ -357,10 +360,8 @@ function Camera:push()
 
     love.graphics.setCanvas(self._internal_canvas)
     love.graphics.clear()
-    love.graphics.push("all")
-    -- Reset and reuse the existing transform instead of creating a new one:
     self:_update_transform()
-    love.graphics.applyTransform(self._transform)
+    love.graphics.replaceTransform(self._transform) 
 end
 
 ---@private
@@ -375,9 +376,9 @@ end
 
 --- Ends rendering to the internal canvas and draws it to the physical screen.
 --- Call this instead of love.graphics.pop().
-function Camera:pop()
-    love.graphics.pop()       -- revert camera transform
+function Camera:detach()
     love.graphics.setCanvas() -- back to physical screen
+    love.graphics.reset()
     love.graphics.push()
     love.graphics.translate(self._offset_x, self._offset_y)
     if self.scale_mode == Camera.SCALE_MODES.STRETCH or self.scale_mode == Camera.SCALE_MODES.BOUNDLESS_ASPECT then
@@ -388,9 +389,9 @@ function Camera:pop()
     love.graphics.draw(self._internal_canvas, 0, 0)
     love.graphics.pop()
 
+    -- Draw debug info such as camera center and limits polygon.
     if self.debug then
         love.graphics.setColor(1, 0, 0)
-        -- Draw camera center
         local center_x, center_y
         if self.scale_mode == Camera.SCALE_MODES.STRETCH or self.scale_mode == Camera.SCALE_MODES.BOUNDLESS_ASPECT then
             center_x = self._canvas_width / 2 * self._screen_scale_x + self._offset_x

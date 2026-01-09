@@ -50,22 +50,22 @@ love.run = function()
         love.event.pump()
         for name, a, b, c, d, e, f in love.event.poll() do
           if name == 'quit' then
-            if not love.quit or not love.quit() then
-              return a or 0
-            end
+            Darkrit._internal.callbacks:send_message('quit')
+            return a or 0
           end
 
           love.handlers[name](a, b, c, d, e, f)
 
-          if name ~= 'update' and name ~= 'draw' then
-            if Darkrit[name] then
-              Darkrit[name](Darkrit, a, b, c, d, e, f)
-            end
+          if name ~= 'update' and name ~= 'draw' and name ~= 'load' then
+            ---@diagnostic disable-next-line
+            Darkrit._internal.callbacks:send_message(name, a, b, c, d, e, f)
+            -- Darkrit.scene_system:send_message(name, a, b, c, d, e, f)
           end
         end
       end
 
-      Darkrit:update(tick.rate)
+      Darkrit._internal.callbacks:send_message('update', tick.rate)
+      -- Darkrit.scene_system:send_message('update', tick.rate)
     end
 
     while tick.framerate and timer.getTime() - lastframe < 1 / tick.framerate do
@@ -76,8 +76,10 @@ love.run = function()
     if graphics and graphics.isActive() then
       graphics.origin()
       graphics.clear(graphics.getBackgroundColor())
+      graphics.setColor(255, 255, 255, 255)
       tick.frame = tick.frame + 1
-      Darkrit:draw()
+      ---@diagnostic disable-next-line
+      Darkrit._internal.callbacks:send_message('draw', a, b, c, d, e, f)
       graphics.present()
     end
 

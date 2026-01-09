@@ -13,9 +13,9 @@ transform.__index = transform
 ---@overload fun(): Darkrit.Graphics.Transform
 ---@overload fun(other_transform: Darkrit.Graphics.Transform): Darkrit.Graphics.Transform
 function transform.new(position, rotation, scale)
-    if type(position) == "cdata" and position.position then
+    if getmetatable(position) == transform then
         -- Copy constructor overload: when the first argument is a transform.
-        local other = position
+        local other = position ---@cast other -nil
         return setmetatable({
             position = other.position or nvec(0, 0),
             rotation = other.rotation or 0,

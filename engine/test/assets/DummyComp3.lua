@@ -1,5 +1,5 @@
 ---@class DummyComp3 : Darkrit.Entity.Component
----@field sprite Dakrit.Graphics.AnimatedSprite
+---@field sprite Darkrit.Graphics.AnimatedSprite
 local DummyComp1 = {}
 DummyComp1.__index = DummyComp1
 

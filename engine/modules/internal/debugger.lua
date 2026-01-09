@@ -23,9 +23,18 @@ local function getArgs(func)
     return params
 end
 
-local function print_table(table)
+local function print_table(table, indent)
+    indent = indent or 0
     for key, value in pairs(table) do
-        print(key, value)
+        if type(value) == "table" then
+            print(key .. ":")
+            print_table(value, indent + 1)
+        else
+            for i = 1, indent do
+                io.write("  ")
+            end
+            print(key, value)
+        end
     end
 end
 

@@ -1,7 +1,7 @@
 --- A parser/renderer for Aseprite animations in LÖVE.
 -- @classmod peachy
 
----@class Dakrit.Graphics.AnimatedSprite
+---@class Darkrit.Graphics.AnimatedSprite
 ---@field _json_data table
 ---@field image love.Image
 ---@field frames table
@@ -66,7 +66,7 @@ peachy.__index = peachy
 
 --- Initialize events from the layers in the JSON metadata
 function peachy:_initialize_events()
-  -- Table to store events by frame
+  -- Table to store events by tag and frame
   self.events = {}
 
   -- Process layers if they exist
@@ -90,9 +90,18 @@ function peachy:_initialize_events()
           local event_name = event_data.event.name
           local event_detail = event_data.event.data
 
-          -- Create a table for events in this frame if it doesn't exist
-          self.events[frame] = self.events[frame] or {}
-          table.insert(self.events[frame], { name = event_name, data = event_detail })
+          -- Find the tag that contains this frame
+          for tag_name, tag_data in pairs(self.frame_tags) do
+            for i, tag_frame in ipairs(tag_data.frames) do
+              if tag_frame == self.frames[frame] then
+                -- Store the event relative to the tag and frame index
+                self.events[tag_name] = self.events[tag_name] or {}
+                self.events[tag_name][i] = self.events[tag_name][i] or {}
+                table.insert(self.events[tag_name][i], { name = event_name, data = event_detail })
+                break
+              end
+            end
+          end
         end
       end
     end
@@ -125,11 +134,11 @@ end
 
 --- Trigger events associated with the current frame
 function peachy:_trigger_events()
-  if not self.events[self.frame_index] or not self.event_callbacks then
+  if not self.events[self.tag_name] or not self.events[self.tag_name][self.frame_index] or not self.event_callbacks then
     return
   end
 
-  for _, event in ipairs(self.events[self.frame_index]) do
+  for _, event in ipairs(self.events[self.tag_name][self.frame_index]) do
     local callbacks = self.event_callbacks[event.name]
     if callbacks then
       for _, callback in ipairs(callbacks) do
@@ -164,7 +173,7 @@ end
 ---@param data_file string | table a path to an Aseprite JSON file. It is also possible to pass a predecoded table, which is useful for performance when creating large amounts of the same animation.
 ---@param image_data love.Image a LÖVE image to animate.
 ---@param initial_tag string? the name of the animation tag to use initially.
----@return Dakrit.Graphics.AnimatedSprite
+---@return Darkrit.Graphics.AnimatedSprite
 function peachy.new(data_file, image_data, initial_tag)
   assert(data_file ~= nil, "No JSON data!")
 
